@@ -91,7 +91,7 @@ func main() {
 		}
 
 		// seek
-		fmt.Println("本地文件:", localFileName, "已存在, 偏移位置为: ", lstat.Size(), "(", formatFileSize(lstat.Size()), "), 从该位置继续下载 ...")
+		fmt.Println("本地文件:", *localFileName, "已存在, 偏移位置为: ", lstat.Size(), "(", formatFileSize(lstat.Size()), "), 从该位置继续下载 ...")
 		remoteFile.Seek(lstat.Size(), io.SeekStart)
 
 		// not exist

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -14,22 +17,50 @@ import (
 var SSH_HOST *string
 var SSH_USER *string
 var SSH_PASSWORD *string
-var remoteFileName *string
-var localFileName *string
+var REMOTE_FILE_NAME *string
+var LOCAL_FILE_NAME *string
+var PER_SECONDS_SHOW_SPEED *string
 
 func main() {
+
+	defer func() {
+		if err := recover(); err != nil {
+			buf := new(bytes.Buffer)
+			fmt.Println()
+			fmt.Println(">>>>>>", err, "<<<<<<")
+			fmt.Println()
+			for i := 1; ; i++ {
+				pc, file, line, ok := runtime.Caller(i)
+				if !ok {
+					break
+				}
+				fmt.Fprintf(buf, "file:%s ( line: %d, pc: 0x%x )\n", file, line, pc)
+			}
+
+			fmt.Println(buf.String())
+			fmt.Println()
+			fmt.Println()
+		}
+	}()
+
 	SSH_HOST = flag.String("h", "", "remote host")
 	SSH_USER = flag.String("u", "", "remote ssh user")
 	SSH_PASSWORD = flag.String("p", "", "remote ssh user's password")
-	remoteFileName = flag.String("rf", "", "remote file (abs file path)")
-	localFileName = flag.String("lf", "", "local file (abs file path)")
+	REMOTE_FILE_NAME = flag.String("rf", "", "remote file (abs file path)")
+	LOCAL_FILE_NAME = flag.String("lf", "", "local file (abs file path)")
+	PER_SECONDS_SHOW_SPEED = flag.String("secs", "1", "per seconds show speed of progress")
 	flag.Parse()
+
+	perSecs, perSecsErr := strconv.Atoi(*PER_SECONDS_SHOW_SPEED)
+	if perSecsErr != nil {
+		panic(fmt.Sprintf("can't parse PER_SECONDS_SHOW_SPEED, %e", perSecsErr))
+	}
 
 	// debug info: configration
 	fmt.Println("SSH_HOST:", *SSH_HOST, "SSH_USER:", *SSH_USER, "SSH_PASSWORD:",
-		*SSH_PASSWORD, "remoteFileName:", *remoteFileName, "localFileName:", *localFileName)
+		*SSH_PASSWORD, "remoteFileName:", *REMOTE_FILE_NAME, "localFileName:", *LOCAL_FILE_NAME)
 
-	if *SSH_HOST == "" || *SSH_USER == "" || *SSH_PASSWORD == "" || *remoteFileName == "" || *localFileName == "" {
+	if *SSH_HOST == "" || *SSH_USER == "" || *SSH_PASSWORD == "" || *REMOTE_FILE_NAME == "" || *LOCAL_FILE_NAME == "" {
 		panic("parameter error")
 	}
 
@@ -40,7 +71,7 @@ func main() {
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		ClientVersion:   "",
-		Timeout:         10 * time.Second,
+		Timeout:         100 * time.Second,
 	}
 
 	sshClient, err := ssh.Dial("tcp", *SSH_HOST, sshConfig)
@@ -56,7 +87,7 @@ func main() {
 	defer sftpClient.Close()
 
 	// remote
-	remoteFile, err := sftpClient.Open(*remoteFileName)
+	remoteFile, err := sftpClient.Open(*REMOTE_FILE_NAME)
 	if err != nil {
 		panic(err)
 	}
@@ -65,11 +96,11 @@ func main() {
 	// local
 	var localFile *os.File
 	var localFileErr error
-	_, localFileStatErr := os.Stat(*localFileName)
+	_, localFileStatErr := os.Stat(*LOCAL_FILE_NAME)
 
 	// already exist
 	if localFileStatErr == nil {
-		localFile, localFileErr = os.OpenFile(*localFileName, os.O_RDWR|os.O_APPEND, os.ModeAppend|os.ModePerm)
+		localFile, localFileErr = os.OpenFile(*LOCAL_FILE_NAME, os.O_RDWR|os.O_APPEND, os.ModeAppend|os.ModePerm)
 		if localFileErr != nil {
 			panic(localFileErr)
 		}
@@ -91,12 +122,12 @@ func main() {
 		}
 
 		// seek
-		fmt.Println("本地文件:", *localFileName, "已存在, 偏移位置为: ", lstat.Size(), "(", formatFileSize(lstat.Size()), "), 从该位置继续下载 ...")
+		fmt.Println("本地文件:", *LOCAL_FILE_NAME, "已存在, 偏移位置为: ", lstat.Size(), "(", formatFileSize(lstat.Size()), "), 从该位置继续下载 ...")
 		remoteFile.Seek(lstat.Size(), io.SeekStart)
 
 		// not exist
 	} else if os.IsNotExist(localFileStatErr) {
-		localFile, localFileErr = os.Create(*localFileName)
+		localFile, localFileErr = os.Create(*LOCAL_FILE_NAME)
 		if localFileErr != nil {
 			panic(localFileErr)
 		}
@@ -105,14 +136,14 @@ func main() {
 	}
 	defer localFile.Close()
 
+	rstat, _ := remoteFile.Stat()
+	rsize := rstat.Size()
+
 	go func() {
 		for {
-			time.Sleep(time.Second)
+			time.Sleep(time.Second * time.Duration(perSecs))
 			lstat, _ := localFile.Stat()
-			rstat, _ := remoteFile.Stat()
 			lsize := lstat.Size()
-			rsize := rstat.Size()
-
 			fmt.Println("总大小:", formatFileSize(rsize), ", 已下载:", formatFileSize(lsize), "进度:", fmt.Sprintf("%.2f", (float64(lsize)*100/float64(rsize)))+"%")
 		}
 	}()

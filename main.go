@@ -20,9 +20,11 @@ var SSH_PASSWORD *string
 var REMOTE_FILE_NAME *string
 var LOCAL_FILE_NAME *string
 var PER_SECONDS_SHOW_SPEED *string
+var TIMEOUT *string
 
 func main() {
 
+	// recover
 	defer func() {
 		if err := recover(); err != nil {
 			buf := new(bytes.Buffer)
@@ -49,11 +51,18 @@ func main() {
 	REMOTE_FILE_NAME = flag.String("rf", "", "remote file (abs file path)")
 	LOCAL_FILE_NAME = flag.String("lf", "", "local file (abs file path)")
 	PER_SECONDS_SHOW_SPEED = flag.String("secs", "1", "per seconds show speed of progress")
+	TIMEOUT = flag.String("to", "10", "timeout for ssh service")
+
 	flag.Parse()
 
 	perSecs, perSecsErr := strconv.Atoi(*PER_SECONDS_SHOW_SPEED)
 	if perSecsErr != nil {
 		panic(fmt.Sprintf("can't parse PER_SECONDS_SHOW_SPEED, %e", perSecsErr))
+	}
+
+	timeout, timeOutErr := strconv.Atoi(*TIMEOUT)
+	if timeOutErr != nil {
+		panic(fmt.Sprintf("can't parse TIMEOUT, %e", timeOutErr))
 	}
 
 	// debug info: configration
@@ -71,7 +80,7 @@ func main() {
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		ClientVersion:   "",
-		Timeout:         100 * time.Second,
+		Timeout:         time.Duration(timeout) * time.Second,
 	}
 
 	sshClient, err := ssh.Dial("tcp", *SSH_HOST, sshConfig)
@@ -98,8 +107,9 @@ func main() {
 	var localFileErr error
 	_, localFileStatErr := os.Stat(*LOCAL_FILE_NAME)
 
-	// already exist
 	if localFileStatErr == nil {
+		// already exist
+
 		localFile, localFileErr = os.OpenFile(*LOCAL_FILE_NAME, os.O_RDWR|os.O_APPEND, os.ModeAppend|os.ModePerm)
 		if localFileErr != nil {
 			panic(localFileErr)
@@ -125,13 +135,16 @@ func main() {
 		fmt.Println("本地文件:", *LOCAL_FILE_NAME, "已存在, 偏移位置为: ", lstat.Size(), "(", formatFileSize(lstat.Size()), "), 从该位置继续下载 ...")
 		remoteFile.Seek(lstat.Size(), io.SeekStart)
 
-		// not exist
 	} else if os.IsNotExist(localFileStatErr) {
+		// not exist
+
 		localFile, localFileErr = os.Create(*LOCAL_FILE_NAME)
 		if localFileErr != nil {
 			panic(localFileErr)
 		}
 	} else {
+		// file system error
+
 		panic(localFileStatErr)
 	}
 	defer localFile.Close()
@@ -139,6 +152,7 @@ func main() {
 	rstat, _ := remoteFile.Stat()
 	rsize := rstat.Size()
 
+	// show speed of progress
 	go func() {
 		for {
 			time.Sleep(time.Second * time.Duration(perSecs))

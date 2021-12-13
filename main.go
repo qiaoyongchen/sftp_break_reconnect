@@ -36,7 +36,7 @@ func main() {
 				if !ok {
 					break
 				}
-				fmt.Fprintf(buf, "file:%s ( line: %d, pc: 0x%x )\n", file, line, pc)
+				fmt.Fprintf(buf, "File \"%s\" Line: %d PC: 0x%x \n", file, line, pc)
 			}
 
 			fmt.Println(buf.String())
@@ -50,7 +50,7 @@ func main() {
 	SSH_PASSWORD = flag.String("p", "", "remote ssh user's password")
 	REMOTE_FILE_NAME = flag.String("rf", "", "remote file (abs file path)")
 	LOCAL_FILE_NAME = flag.String("lf", "", "local file (abs file path)")
-	PER_SECONDS_SHOW_SPEED = flag.String("secs", "1", "per seconds show speed of progress")
+	PER_SECONDS_SHOW_SPEED = flag.String("secs", "10", "per seconds show speed of progress")
 	TIMEOUT = flag.String("to", "10", "timeout for ssh service")
 
 	flag.Parse()
